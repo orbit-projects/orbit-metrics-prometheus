@@ -17,8 +17,8 @@ import pytest
 from orbit import Application, ApplicationConfig
 from orbit.asgi import ASGIApplication
 from orbit.diagnostics import MetricSnapshot, MetricsRegistry
+from orbit_auth import Identity, Principal, RoleAuthorizer
 from orbit_metrics import MetricsExporter
-from orbit_security import Identity, Principal, RoleAuthorizer
 from orbit_testing import TestClient
 
 from orbit_metrics_prometheus import PrometheusExporter, PrometheusPlugin
@@ -96,12 +96,15 @@ async def test_metrics_plugin_requires_role_and_serves_endpoint_when_authorized(
     assert denied.status == 401
 
     app = Application(ApplicationConfig(name="prometheus-plugin-authorized"))
-    app.register_plugin(PrometheusPlugin())
+    plugin = PrometheusPlugin()
+    app.register_plugin(plugin)
     async with TestClient(
         ASGIApplication(app, authenticator=Auth(), authorizer=RoleAuthorizer())
     ) as client:
         await client.request("GET", "/missing")
         response = await client.request("GET", "/metrics")
+        action_result = await plugin.control_actions[0].handler({})
     assert response.status == 200
     assert response.headers["content-type"] == "text/plain; version=0.0.4; charset=utf-8"
     assert "orbit_http_responses_total" in response.body.decode()
+    assert action_result is not None and action_result.summary == "Prometheus exposition rendered."

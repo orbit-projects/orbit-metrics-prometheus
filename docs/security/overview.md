@@ -1,17 +1,28 @@
-# Orbit Metrics Prometheus: security
+# Security
 
-## Package-specific security guidance
+## Route authorization
 
-The README does not define separate package-specific security guarantees. Follow the implemented API and provider documentation; do not infer security properties that are not documented and tested.
+Prometheus metrics can disclose internal service names, deployment shape, dependency state, and
+traffic patterns. The plugin requires the `orbit.metrics.read` role by default, but Core only stores
+route role metadata. Configure an ASGI authenticator and authorizer to enforce it. A route
+requirement without an authorizer is not access control. Keep the scrape endpoint on a trusted
+network and use the same ingress and identity controls in production as in other operational APIs.
 
-## Credentials and sensitive data
+An empty role set removes the role requirement at the route. Use it only when a separate network
+boundary restricts access. Verify behavior with both authenticated and unauthenticated requests.
 
-Use least-privilege credentials and a secret manager for provider secrets. Do not commit secrets, tokens, private keys, personal data, request bodies, raw provider errors, or opaque cursors. Enable TLS certificate verification for remote services unless package documentation gives a narrowly scoped local-development exception.
+## Metric content and cardinality
 
-## Vulnerability disclosure
+Metric labels and values may contain user, tenant, or infrastructure details. Instrument only
+bounded, reviewed dimensions; never put credentials, tokens, request bodies, or raw personal data
+in labels. High-cardinality labels can increase memory use and expose identifiers. This exporter
+does not sanitize labels for sensitivity; it escapes text for syntax and enforces format bounds.
 
-Follow the repository [security policy](../../SECURITY.md). Do not post vulnerability details in public issues. The policy describes private reporting alternatives without claiming that a hosting-platform setting is enabled.
+The exporter caps one response at 8 MiB and 100,000 snapshots, but those limits do not replace
+safe instrumentation or access control. Avoid logging full scrape bodies and monitor failures
+without attaching sensitive metric values to error reports.
 
-## Limits
+## Vulnerability reporting
 
-This page records source and package documentation, not an independent security audit. Validate the package, its provider SDKs, and its deployment configuration before production use.
+Use the private vulnerability-reporting guidance in the repository
+[security policy](../../SECURITY.md).

@@ -13,11 +13,11 @@
 # limitations under the License.
 """Optional protected ASGI endpoint for Prometheus scrapes."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from orbit import Application
 from orbit.asgi import Request, Response
-from orbit.plugins import Plugin, PluginMetadata
+from orbit.plugins import ControlAction, ControlResult, Plugin, PluginMetadata
 from orbit_metrics import MetricsExporter
 
 from orbit_metrics_prometheus.exporter import PrometheusExporter
@@ -27,7 +27,8 @@ class PrometheusPlugin(Plugin):
     """Register `/metrics` using the Core plugin and route contracts.
 
     The default route requires the ``orbit.metrics.read`` role. Set ``roles`` to an empty frozen
-    set only when a trusted network boundary independently protects the endpoint.
+    set only when a trusted network boundary independently protects the endpoint. Core records the
+    role requirement; an ASGI authorizer and authenticator must be configured to enforce it.
     """
 
     metadata = PluginMetadata(
@@ -49,11 +50,23 @@ class PrometheusPlugin(Plugin):
             role_set.add(role)
         self._roles = frozenset(role_set)
         self._exporter: MetricsExporter = PrometheusExporter()
+        self._application: Application | None = None
+        self.control_actions = (
+            ControlAction(
+                id="preview-scrape",
+                title="Preview Prometheus scrape",
+                description="Render a bounded local exposition without making an HTTP request.",
+                handler=self._preview_scrape,
+            ),
+        )
 
     def setup(self, application: Application) -> None:
         """Contribute a `/metrics` handler that exports a fresh Core snapshot on each scrape."""
         if not isinstance(application, Application):
             raise TypeError("PrometheusPlugin requires an Orbit Application.")
+        if self._application is not None:
+            raise RuntimeError("PrometheusPlugin is already bound to an application.")
+        self._application = application
 
         @application.router.route(
             "/metrics", method="GET", name="orbit-metrics-prometheus-metrics", roles=self._roles
@@ -66,6 +79,22 @@ class PrometheusPlugin(Plugin):
                 body=exposition.encode("utf-8"),
                 headers={"content-type": "text/plain; version=0.0.4; charset=utf-8"},
             )
+
+    async def _preview_scrape(self, _: Mapping[str, object]) -> ControlResult:
+        """Render bounded local metric exposition and return counts without metric values."""
+        application = self._application
+        if application is None:
+            return ControlResult(
+                "Prometheus plugin is not bound to an application.", succeeded=False
+            )
+        application.diagnostics.update_runtime(application)
+        snapshots = application.diagnostics.metrics.snapshots()
+        exposition = self._exporter.export(snapshots)
+        sample_count = sum(not line.startswith("#") for line in exposition.splitlines())
+        return ControlResult(
+            "Prometheus exposition rendered.",
+            (f"metric_snapshots: {len(snapshots)}", f"exposition_samples: {sample_count}"),
+        )
 
 
 __all__ = ["PrometheusPlugin"]

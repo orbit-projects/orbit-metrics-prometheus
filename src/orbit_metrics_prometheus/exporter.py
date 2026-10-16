@@ -25,10 +25,20 @@ _MAX_OUTPUT_BYTES = 8 * 1024 * 1024
 
 
 class PrometheusExporter:
-    """Render Core snapshots using Prometheus's text exposition conventions."""
+    """Render detached Core snapshots as bounded Prometheus text exposition.
+
+    The exporter emits deterministic ``TYPE`` and sample lines, validates family/sample name
+    collisions, escapes label values, and limits the response to 8 MiB. It does not expose HTTP or
+    choose how the metric registry is collected.
+    """
 
     def export(self, snapshots: tuple[MetricSnapshot, ...]) -> str:
-        """Return deterministic TYPE and sample lines for a detached snapshot collection."""
+        """Serialize a tuple of snapshots without changing Core's metric semantics.
+
+        Names, labels, and histogram-generated sample names must be representable without
+        collisions in Prometheus. Output is sorted for repeatable scrapes and includes one final
+        newline when the collection is non-empty.
+        """
         if not isinstance(snapshots, tuple):
             raise TypeError("Prometheus export requires a tuple of Core MetricSnapshot values.")
         if len(snapshots) > _MAX_SNAPSHOTS:

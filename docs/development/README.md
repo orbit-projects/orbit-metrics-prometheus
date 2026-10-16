@@ -19,3 +19,10 @@ Optional SDKs and live-service tests are described by the package README. Do not
 ## Contribution expectations
 
 Add focused regression coverage for behavior changes. Update the README and relevant guide when a contract, configuration option, security property, lifecycle rule, or operational assumption changes. Report the exact versions and services exercised; local checks do not imply hosted CI or release validation.
+
+## Latest local checkpoint (2026-10-10)
+
+The current exporter and route tests passed on CPython **3.11.14, 3.12.14, 3.13.15, and 3.14.7**:
+8 tests per interpreter. Ruff lint and formatting, strict mypy, and wheel/sdist builds also passed on
+each interpreter. The tests use Orbit's local Core, Metrics, Auth, and Testing checkouts. No live
+Prometheus scrape, hosted CI, publication, provenance, or deployment was exercised.
